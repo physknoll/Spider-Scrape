@@ -1,0 +1,17 @@
+{
+    "name": "spider-markdown-crawler",
+    "version": "1.0.0",
+    "description": "A Node.js crawler service using Spider API...",
+    "type": "module",
+    "main": "src/crawler.js",
+    "scripts": {
+        "start": "node src/crawler.js",
+        "test": "node test/test.js"
+    },
+    "dependencies": {
+        "@spider-cloud/spider-client": "^0.1.24",
+        "dotenv": "^16.0.0",
+        "mongoose": "^7.0.0",
+        "winston": "^3.9.0"
+    }
+}
