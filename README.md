@@ -1,4 +1,3 @@
-```markdown
 # 🕷️ Spider Markdown Crawler
 
 ## 🌐 Overview
@@ -6,7 +5,7 @@ This Node.js service crawls websites using the [Spider Cloud JavaScript SDK](htt
 
 **Key Features**:
 - 🌱 Dynamically creates a new MongoDB collection per domain (e.g., `crawl_www_example_com`)
-- ✨ Converts HTML to Markdown using Spider API’s `return_format: markdown`
+- ✨ Converts HTML to Markdown using Spider API's `return_format: markdown`
 - 🗄 Stores a single combined Markdown file per domain
 - 📜 Maintains a `crawl_status` collection for real-time status checks (e.g., `in-progress`, `complete`)
 - 🔑 Integration-ready for production environments (run multiple crawls for hundreds/thousands of domains)
@@ -42,7 +41,7 @@ This Node.js service crawls websites using the [Spider Cloud JavaScript SDK](htt
    - The script connects to MongoDB.
    - Instantiates the Spider SDK with your `SPIDER_API_KEY`.
    - Crawls `https://www.example.com`, retrieves pages in Markdown.
-   - Combines all pages’ Markdown into a single document.
+   - Combines all pages' Markdown into a single document.
    - Stores it under a dynamically named collection: `crawl_www_example_com`.
    - Updates `crawl_status` collection to track progress (`in-progress` → `complete`).
 
@@ -121,4 +120,3 @@ You now have a scalable, production-friendly web crawling system:
 - Fully customizable to integrate into larger workflows
 
 Happy Crawling! 🕷🚀
-```
