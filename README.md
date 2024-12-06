@@ -1,4 +1,3 @@
-```markdown
 # 🕷️ Spider Markdown Crawler with Enhanced Filtering and Summarization
 
 ## 📋 Overview
