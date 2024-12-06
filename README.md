@@ -1,122 +1,115 @@
-# 🕷️ Spider Markdown Crawler
+```markdown
+# 🕷️ Spider Markdown Crawler with Enhanced Filtering and Summarization
 
-## 🌐 Overview
-This Node.js service crawls websites using the [Spider Cloud JavaScript SDK](https://spider.cloud/) and stores the results in MongoDB Atlas. It converts the scraped HTML into Markdown and saves all pages from a given domain into a single document within a dedicated MongoDB collection named after that domain.
+## 📋 Overview
+This Node.js service crawls a specified website using the [Spider Cloud JavaScript SDK](https://spider.cloud/), extracts text as Markdown, then aggressively cleans and filters the content to ensure only the most relevant information remains. If the content is still large, it uses a two-step approach with OpenAI's APIs to summarize and then analyze the data.
 
-**Key Features**:
-- 🌱 Dynamically creates a new MongoDB collection per domain (e.g., `crawl_www_example_com`)
-- ✨ Converts HTML to Markdown using Spider API's `return_format: markdown`
-- 🗄 Stores a single combined Markdown file per domain
-- 📜 Maintains a `crawl_status` collection for real-time status checks (e.g., `in-progress`, `complete`)
-- 🔑 Integration-ready for production environments (run multiple crawls for hundreds/thousands of domains)
+Once processed, the results (including a dense business overview, an ideal customer profile, and suggested categories) are stored in MongoDB Atlas. This ensures that even if the OpenAI analysis fails or the content is too large, you’ll still have at least the cleaned/truncated version of the data stored.
 
-## 🛠 Prerequisites
+## ✨ Key Features
+- **Web Crawling via Spider Cloud SDK**: Automatically scrape multiple pages from a domain.
+- **Aggressive Content Cleaning**:
+  - Removes images, extraneous URLs, navigation-like text, short lines, and low-value content.
+  - Ensures that only lines with substantial alphabetic characters and meaningful words remain.
+- **Content Truncation & Summarization**:
+  - If content is still too large, it truncates and summarizes the data using a chosen OpenAI model (e.g., `gpt-3.5-turbo-16k`), greatly reducing the context size.
+- **OpenAI Analysis**:
+  - Generates a **business overview** paragraph.
+  - Identifies the **ideal customer profile (ICP)**.
+  - Proposes category names as JSON for organizing information in a UI or database.
+- **MongoDB Integration**:
+  - Stores combined Markdown, summarized content, and analysis results in separate collections per domain.
+  - Updates a `crawl_status` collection to reflect crawl progress and completion.
+- **Resilient to Failures**:
+  - If summarization or analysis fails, the cleaned and truncated data still gets stored in MongoDB.
+  - Allows you to inspect and debug without losing data.
+
+## 🚀 Prerequisites
 - **Node.js** (v16+ recommended)
 - **NPM or Yarn**
 - **MongoDB Atlas** account
-- **Spider API Key** (obtain from [spider.cloud](https://spider.cloud/))
+- **Spider API Key** (from [spider.cloud](https://spider.cloud/))
+- **OpenAI API Key** (with access to `gpt-4` and a summarization-capable model like `gpt-3.5-turbo-16k`)
 
-## ⚙️ Environment Setup
-1. **Install Dependencies**:
+## 🛠 Installation
+1. **Clone the Repository**:
+   ```bash
+   git clone https://github.com/your-username/spider-markdown-crawler.git
+   cd spider-markdown-crawler
+   ```
+
+2. **Install Dependencies**:
    ```bash
    npm install
    ```
-   
-2. **Configure Environment Variables**:
-   Create a `.env` file in the project root:
+
+3. **Set Environment Variables** in a `.env` file:
    ```plaintext
    SPIDER_API_KEY=your_spider_api_key
+   OPENAI_API_KEY=your_openai_api_key
    MONGO_URI=mongodb+srv://<username>:<password>@<cluster>.mongodb.net/spider_crawls?retryWrites=true&w=majority
    LOG_LEVEL=info
    ```
-   
-   **Note:** Replace `<username>`, `<password>` and `<cluster>` with your MongoDB Atlas credentials. Also, `spider_crawls` is your chosen database name.
 
 ## 🏗 How It Works
-1. **Run the Crawler**:
+1. **Crawl the Website**:
    ```bash
    node src/crawler.js https://www.example.com
    ```
-   
-   - The script connects to MongoDB.
-   - Instantiates the Spider SDK with your `SPIDER_API_KEY`.
-   - Crawls `https://www.example.com`, retrieves pages in Markdown.
-   - Combines all pages' Markdown into a single document.
-   - Stores it under a dynamically named collection: `crawl_www_example_com`.
-   - Updates `crawl_status` collection to track progress (`in-progress` → `complete`).
+   The script:
+   - Uses the Spider SDK to crawl `https://www.example.com`.
+   - Cleans and filters the retrieved Markdown content aggressively.
+   - Truncates the content to avoid extremely large prompts.
+   - Stores the cleaned/truncated content in MongoDB immediately so you have data regardless of downstream failures.
 
-2. **Status and Collections**:
-   - **`crawl_status`** Collection:  
-     Stores documents with fields like `domain`, `status`, `startTime`, `endTime`, `pagesCrawled`.
-     
-     Example document:
-     ```json
-     {
-       "domain": "www.example.com",
-       "status": "complete",
-       "startTime": "2024-12-05T22:17:09.000Z",
-       "endTime": "2024-12-05T22:20:00.000Z",
-       "pagesCrawled": 10
-     }
-     ```
+2. **Summarization (If Needed)**:
+   - If the content is still large after cleaning/truncation, it will attempt a summarization step using a summarization-capable model (`gpt-3.5-turbo-16k`).
+   - On successful summarization, it updates the stored content in MongoDB with the summarized text.
 
-   - **Domain-Specific Collection**:  
-     For `https://www.example.com`, a collection named `crawl_www_example_com` is created.
-     
-     Example document:
-     ```json
-     {
-       "url": "https://www.example.com",
-       "combinedMarkdown": "# URL: https://www.example.com\n\nSome markdown content...\n\n---\n\n# URL: https://www.example.com/page2\n\nMore markdown...",
-       "metadata": {
-         "startTime": "2024-12-05T22:17:09.000Z",
-         "endTime": "2024-12-05T22:20:00.000Z",
-         "status": "complete",
-         "pagesCrawled": 10
-       }
-     }
-     ```
+3. **OpenAI Analysis**:
+   - Once the content is small enough, it sends prompts to `gpt-4` to get:
+     - A **business overview** paragraph.
+     - An **ideal customer profile (ICP)** paragraph.
+     - A set of **categories** in JSON format.
 
-## 🔍 Querying the Results
-**Check Crawl Status**:
+   All these analyses are stored back into MongoDB under the `analysis` field for the crawled domain.
+
+4. **Result**:
+   - MongoDB now contains:
+     - `crawl_status` collection tracking crawl status.
+     - `crawl_<domain>` collection for the given domain, containing:
+       - `combinedMarkdown` (cleaned or summarized)
+       - `analysis.businessOverview`
+       - `analysis.idealCustomerProfile`
+       - `analysis.categories` (JSON array)
+
+## 📚 Querying Results
+Use the MongoDB Atlas dashboard or a MongoDB client:
 ```javascript
-// Within another Node.js application
 import mongoose from 'mongoose';
+
 await mongoose.connect(process.env.MONGO_URI);
+const collectionName = 'crawl_www_example_com'; // for domain: www.example.com
+const CrawlModel = mongoose.model(collectionName, new mongoose.Schema({}, { strict: false, collection: collectionName }));
+const doc = await CrawlModel.findOne({ url: 'https://www.example.com' });
 
-const StatusModel = mongoose.model('crawl_status', new mongoose.Schema({}, { strict: false, collection: 'crawl_status' }));
-const statusDoc = await StatusModel.findOne({ domain: 'www.example.com' });
-console.log('Crawl Status:', statusDoc.status); // "complete"
+console.log(doc.combinedMarkdown);
+console.log(doc.analysis.businessOverview);
+console.log(doc.analysis.idealCustomerProfile);
+console.log(doc.analysis.categories);
 ```
 
-**Retrieve Combined Markdown** (once status is "complete"):
-```javascript
-const CrawlModel = mongoose.model('crawl_www_example_com', new mongoose.Schema({}, { strict: false, collection: 'crawl_www_example_com' }));
-const crawlDoc = await CrawlModel.findOne({ url: 'https://www.example.com' });
-console.log('Combined Markdown:', crawlDoc.combinedMarkdown);
+## ⚠️ Error Handling & Limitations
+- If the content is too large, the code truncates and summarizes.
+- If OpenAI requests fail due to context length or other issues, you still retain data in MongoDB.
+- Adjust cleaning heuristics and truncation lengths as needed to accommodate different websites and content sizes.
+
+## 🤝 Contributing
+- Fork the repo
+- Create a feature branch
+- Make changes and commit
+- Submit a pull request
+
+## 📜 License
+This project is licensed under the MIT License.
 ```
-
-## 🏭 Production Considerations
-- **Multiple Crawls**: Run `node src/crawler.js <url>` for each new domain. Each domain gets its own collection.
-- **Error Handling**: The crawler sets `status: "error"` if something fails.
-- **Overwrite Behavior**: If the collection already exists, the script currently overwrites data. Adjust the code if you prefer to abort or version the data.
-- **Performance**: Adjust `limit` and other `params` in `crawler.js` to control how many pages you scrape.
-
-## 🚀 Example Workflow
-1. Set `MONGO_URI` and `SPIDER_API_KEY`.
-2. Run:
-   ```bash
-   node src/crawler.js https://www.cognitivetalentsolutions.com/
-   ```
-3. Wait until it logs "Stored combined markdown content...".
-4. Query `crawl_status` to confirm `status: "complete"`.
-5. Fetch from `crawl_www_cognitivetalentsolutions_com` to view the combined markdown.
-
-## 🎉 Conclusion
-You now have a scalable, production-friendly web crawling system:
-- Input: Any domain URL
-- Output: A single combined Markdown document in a dedicated MongoDB collection
-- Status Tracking: Real-time queryable updates in `crawl_status`
-- Fully customizable to integrate into larger workflows
-
-Happy Crawling! 🕷🚀
