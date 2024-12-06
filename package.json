@@ -12,6 +12,7 @@
         "@spider-cloud/spider-client": "^0.1.24",
         "dotenv": "^16.0.0",
         "mongoose": "^7.0.0",
+        "node-fetch": "^3.3.2",
         "winston": "^3.9.0"
     }
 }
