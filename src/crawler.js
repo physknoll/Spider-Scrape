@@ -61,6 +61,9 @@ async function crawlAndAnalyze() {
 
     combinedMarkdown = cleanContent(combinedMarkdown);
 
+    // Extract important info before truncation/summarization
+    const importantInfo = extractImportantInfo(combinedMarkdown);
+
     // More aggressive truncation before anything else
     const MAX_LENGTH = 8000; 
     if (combinedMarkdown.length > MAX_LENGTH) {
@@ -68,7 +71,7 @@ async function crawlAndAnalyze() {
       logger.info(`Truncated combinedMarkdown to ${MAX_LENGTH} characters.`);
     }
 
-    // Store the combinedMarkdown now, so we have data in DB no matter what
+    // Store the combinedMarkdown now, plus the important info.
     await CrawlModel.findOneAndUpdate(
       { url: urlToCrawl },
       {
@@ -79,6 +82,9 @@ async function crawlAndAnalyze() {
           endTime: new Date(),
           status: 'complete',
           pagesCrawled: spiderData.length
+        },
+        analysis: {
+          importantInfo: importantInfo
         }
       },
       { upsert: true, new: true }
@@ -89,7 +95,7 @@ async function crawlAndAnalyze() {
       { status: 'complete', endTime: new Date(), pagesCrawled: spiderData.length }
     );
 
-    logger.info(`Stored combined markdown content for domain: ${domain}`);
+    logger.info(`Stored combined markdown content and important info for domain: ${domain}`);
 
     // If still long, attempt summarization before final analysis
     if (combinedMarkdown.length > 5000) {
@@ -151,8 +157,22 @@ ${allContent}
 Identify the ideal customer profile (ICP) for this business. Include details on demographics, interests, occupation, industry, and any relevant characteristics that define the customer segment. Present the ICP in one solid, cohesive paragraph, providing a clear and detailed description without bullet points.
 `;
 
-  const categoriesPrompt = `You are an expert at organizing information about businesses into categories that prospective customers care about... (omitted for brevity)
-${allContent}`;
+  const categoriesPrompt = `
+You are an expert at organizing information about businesses into categories that prospective customers care about. Using the details below, propose a list of category names as headings.
+
+Requirements:
+- Do not include actual business data from the provided content.
+- Tailor category names to the business’s brand tone and vibe.
+- Start with the most important categories first, then supplementary ones.
+- Return output as a strictly valid JSON object with a "categories" key mapping to an array of strings.
+- Include no other text, comments, or explanations outside of the JSON.
+- The first character of your response should be '{' and the last character should be '}'.
+
+Details about the business:
+${allContent}
+
+Now respond only with the JSON object, following these instructions precisely.
+`;
 
   try {
     const businessOverview = await callOpenAIAPI(businessOverviewPrompt, "gpt-4");
@@ -262,7 +282,6 @@ function cleanContent(markdown) {
       return false;
     }
 
-    // Remove duplicates or very similar lines
     const lowerLine = line.toLowerCase();
     if (seenLines.has(lowerLine)) return false;
     seenLines.add(lowerLine);
@@ -271,6 +290,56 @@ function cleanContent(markdown) {
   });
 
   return cleanedLines.join('\n');
+}
+
+function extractImportantInfo(markdown) {
+  const lines = markdown.split('\n');
+  
+  const emails = [];
+  const phones = [];
+  const socialLinks = [];
+  const addresses = [];
+
+  const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+  const phoneRegex = /\+?\d[\d\s.-]{7,}\d/g; 
+  // Simple heuristic for addresses: lines containing words like "Street", "St.", "Road", "Rd.", "Ave", "Avenue", "Blvd", "Lane", "Ln", or "Suite", "Ste"
+  const addressKeywords = /\b(street|st\.|road|rd\.|ave\.|avenue|blvd|lane|ln\.|suite|ste\.|way|drive|dr\.|parkway|pkwy|city|state|zip|postal)\b/i;
+  const socialDomains = ['facebook.com', 'twitter.com', 'instagram.com', 'linkedin.com', 'youtube.com'];
+
+  for (const line of lines) {
+    // Extract emails
+    const foundEmails = line.match(emailRegex);
+    if (foundEmails) {
+      emails.push(...foundEmails);
+    }
+
+    // Extract phones
+    const foundPhones = line.match(phoneRegex);
+    if (foundPhones) {
+      phones.push(...foundPhones);
+    }
+
+    // Check for social media links (we've left social links in lines)
+    for (const domain of socialDomains) {
+      if (line.toLowerCase().includes(domain)) {
+        socialLinks.push(line.trim());
+        break;
+      }
+    }
+
+    // Check for address keywords
+    if (addressKeywords.test(line)) {
+      // This is a heuristic, you may refine further
+      addresses.push(line.trim());
+    }
+  }
+
+  return {
+    emails: Array.from(new Set(emails)),
+    phones: Array.from(new Set(phones)),
+    socialLinks: Array.from(new Set(socialLinks)),
+    addresses: Array.from(new Set(addresses))
+  };
 }
 
 async function summarizeContent(content, model = "gpt-3.5-turbo-16k") {
