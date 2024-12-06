@@ -166,7 +166,7 @@ Requirements:
 - Start with the most important categories first, then supplementary ones.
 - Return output as a strictly valid JSON object with a "categories" key mapping to an array of strings.
 - Include no other text, comments, or explanations outside of the JSON.
-- The first character of your response should be '{' and the last character should be '}'.
+- The first character of your response should be '{' and the last character should be '}'
 
 Details about the business:
 ${allContent}
@@ -193,18 +193,43 @@ Now respond only with the JSON object, following these instructions precisely.
       logger.error('Failed to parse categories JSON: ' + err);
     }
 
+    // **New personas prompt**:
+    // Now that we have the ICP (icp variable), we create a prompt for 5 customer personas.
+    const personasPrompt = `
+    You are an expert marketing strategist. Based solely on the following ICP:
+    
+    "${icp}"
+    
+    List 5 distinct customer personas derived from this ICP, each represented as an object with the following keys:
+    - "name": a descriptive persona name or label
+    - "age_range": an approximate age range
+    - "demographic": brief demographic context (e.g., location, cultural background)
+    - "occupation_industry": their occupation or industry
+    - "values_motivations": what they value and what motivates them
+    - "interests": their interests related to the business
+    - "needs_from_business": what they seek or value from this business
+    - "backstory": a brief narrative that provides context to who they are
+    
+    Return the entire response as a strictly valid JSON object with a "personas" key, where "personas" is an array of exactly 5 persona objects. Do not include any text outside of the JSON object. The first character of your response should be '{' and the last character should be '}'.
+    `;
+        
+    const personas = await callOpenAIAPI(personasPrompt, "gpt-4");
+    // 'personas' is expected to be text. You might want to store it as is.
+    // If you want a structured format, you could prompt OpenAI to return JSON, but here we keep it simple.
+
     await CrawlModel.findOneAndUpdate(
       { url: fullUrl },
       {
         $set: {
           "analysis.businessOverview": businessOverview,
           "analysis.idealCustomerProfile": icp,
-          "analysis.categories": categories
+          "analysis.categories": categories,
+          "analysis.personas": personas
         }
       }
     );
 
-    logger.info('Analysis completed and stored in the database.');
+    logger.info('Analysis completed and stored in the database with personas.');
   } catch (analysisError) {
     logger.error(`Analysis failed: ${analysisError}`);
   }
@@ -243,6 +268,9 @@ function cleanContent(markdown) {
     /\bhttps?:\/\/[^\s]+\.(jpg|jpeg|png|gif)/gi
   ];
 
+  // Exclude legal/policy lines
+  const legalKeywords = /(terms of service|privacy policy|cookie policy|gdpr|compliance|legal notice|disclaimer|terms & conditions)/i;
+
   const lines = markdown.split('\n');
   const seenLines = new Set();
 
@@ -265,6 +293,9 @@ function cleanContent(markdown) {
   })
   .filter(line => {
     if (!line) return false;
+
+    // Exclude legal/policy lines
+    if (legalKeywords.test(line)) return false;
 
     // Must contain letters
     if (!/[a-zA-Z]/.test(line)) return false;
@@ -302,7 +333,6 @@ function extractImportantInfo(markdown) {
 
   const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
   const phoneRegex = /\+?\d[\d\s.-]{7,}\d/g; 
-  // Simple heuristic for addresses: lines containing words like "Street", "St.", "Road", "Rd.", "Ave", "Avenue", "Blvd", "Lane", "Ln", or "Suite", "Ste"
   const addressKeywords = /\b(street|st\.|road|rd\.|ave\.|avenue|blvd|lane|ln\.|suite|ste\.|way|drive|dr\.|parkway|pkwy|city|state|zip|postal)\b/i;
   const socialDomains = ['facebook.com', 'twitter.com', 'instagram.com', 'linkedin.com', 'youtube.com'];
 
@@ -319,7 +349,7 @@ function extractImportantInfo(markdown) {
       phones.push(...foundPhones);
     }
 
-    // Check for social media links (we've left social links in lines)
+    // Check for social media links
     for (const domain of socialDomains) {
       if (line.toLowerCase().includes(domain)) {
         socialLinks.push(line.trim());
@@ -327,9 +357,8 @@ function extractImportantInfo(markdown) {
       }
     }
 
-    // Check for address keywords
+    // Check for address keywords (heuristic)
     if (addressKeywords.test(line)) {
-      // This is a heuristic, you may refine further
       addresses.push(line.trim());
     }
   }
